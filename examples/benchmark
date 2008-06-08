@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+
+package Bench::Base;
+
+sub new { 
+    my($class) = shift;
+    bless { test => 23 }, $class;
+}
+
+package Bench::Direct;
+use base qw(Bench::Base);
+
+package Bench::ByHand;
+use base qw(Bench::Base);
+
+sub test {
+    my($self) = shift;
+    if( @_ ) {
+        $self->{test} = (@_ == 1 ? $_[0] : [@_]);
+    }
+    return $self->{test};
+}
+
+package Bench::Class::Accessor;
+use base qw(Class::Accessor);
+__PACKAGE__->mk_accessors(qw(test));
+
+
+package Bench::Class::Accessor::Fast;
+use base qw(Class::Accessor::Fast);
+__PACKAGE__->mk_accessors(qw(test));
+
+package Bench::Class::Accessor::Faster;
+use base qw(Class::Accessor::Faster);
+__PACKAGE__->mk_accessors(qw(test));
+
+my %init   = ( test => 23 );
+my $ca     = Bench::Class::Accessor->new(\%init);
+my $fast   = Bench::Class::Accessor::Fast->new(\%init);
+my $faster = Bench::Class::Accessor::Faster->new(\%init);
+my $direct = Bench::Direct->new;
+my $byhand = Bench::ByHand->new;
+
+my $foo;
+my $control = 42;
+
+
+package main;
+use Benchmark 'cmpthese';
+use strict;
+
+print "accessors:\n";
+cmpthese( -1, 
+           {
+            'Basic' => sub { $foo = $ca->test; },
+            'Fast' => sub { $foo = $fast->test; },
+            'Faster' => sub { $foo = $faster->test; },
+            'Average' => sub { $foo = $byhand->test; },
+            'Direct' => sub { $foo = $direct->{test}; }
+           }
+         );
+
+print "mutators:\n";
+cmpthese( -1, 
+           {
+            'Acc' => sub { $ca->test(42); },
+            'Fast' => sub { $fast->test(42); },
+            'Faster' => sub { $faster->test(42); },
+            'By hand' => sub { $byhand->test(42); },
+            'Direct' => sub { $direct->{test} = 42; }
+           }
+         );
+
