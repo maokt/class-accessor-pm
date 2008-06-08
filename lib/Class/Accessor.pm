@@ -55,7 +55,7 @@ pasting.  You usually wind up with a series of methods like this:
 One for each piece of data in your object.  While some will be unique,
 doing value checks and special storage tricks, most will simply be
 exercises in repetition.  Not only is it Bad Style to have a bunch of
-repetitious code, but its also simply not lazy, which is the real
+repetitious code, but it's also simply not lazy, which is the real
 tragedy.
 
 If you make your module a subclass of Class::Accessor and declare your
@@ -233,8 +233,8 @@ Same as mk_accessors() except it will generate write-only accessors
 it will throw an exception.  It only uses set() and not get().
 
 B<NOTE> I'm not entirely sure why this is useful, but I'm sure someone
-will need it.  If you've found a use, let me know.  Right now its here
-for orthoginality and because its easy to implement.
+will need it.  If you've found a use, let me know.  Right now it's here
+for orthoginality and because it's easy to implement.
 
     package Foo;
     use base qw(Class::Accessor);
@@ -505,7 +505,7 @@ your point of view.
 Direct hash access is, of course, much faster than all of these, but it
 provides no encapsulation.
 
-Of course, its not as simple as saying "Class::Accessor is slower than
+Of course, it's not as simple as saying "Class::Accessor is slower than
 average".  These are benchmarks for a simple accessor.  If your accessors do
 any sort of complicated work (such as talking to a database or writing to a
 file) the time spent doing that work will quickly swamp the time spend just
@@ -611,7 +611,7 @@ would expect this to work:
         return $self->SUPER::email(@_);
     }
 
-There's a subtle problem in the last example, and its in this line:
+There's a subtle problem in the last example, and it's in this line:
 
     return $self->SUPER::email(@_);
 
