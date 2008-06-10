@@ -145,9 +145,16 @@ sub mk_accessors {
     $self->_mk_accessors('rw', @fields);
 }
 
+if (eval { require Sub::Name }) {
+    Sub::Name->import;
+}
 
 {
     no strict 'refs';
+
+    sub _export_accessor {
+        my ($target, $name, $sub) = @_;
+    }
 
     sub _mk_accessors {
         my($self, $access, @fields) = @_;
@@ -163,6 +170,7 @@ sub mk_accessors {
             }
             if ($accessor_name eq $mutator_name) {
                 my $accessor;
+                my $named = 0;
                 if ($ra && $wa) {
                     $accessor = $self->make_accessor($field);
                 } elsif ($ra) {
@@ -171,19 +179,26 @@ sub mk_accessors {
                     $accessor = $self->make_wo_accessor($field);
                 }
                 unless (defined &{"${class}::$accessor_name"}) {
+                    subname("${class}::$accessor_name", $accessor) if defined &subname;
+                    $named = 1;
                     *{"${class}::$accessor_name"} = $accessor;
                 }
                 if ($accessor_name eq $field) {
                     # the old behaviour
                     my $alias = "_${field}_accessor";
+                    subname("${class}::$alias", $accessor) if defined &subname and not $named;
                     *{"${class}::$alias"} = $accessor unless defined &{"${class}::$alias"};
                 }
             } else {
                 if ($ra and not defined &{"${class}::$accessor_name"}) {
-                    *{"${class}::$accessor_name"} = $self->make_ro_accessor($field);
+                    my $accessor = $self->make_ro_accessor($field);
+                    subname("${class}::$accessor_name", $accessor) if defined &subname;
+                    *{"${class}::$accessor_name"} = $accessor;
                 }
                 if ($wa and not defined &{"${class}::$mutator_name"}) {
-                    *{"${class}::$mutator_name"} = $self->make_wo_accessor($field);
+                    my $mutator = $self->make_wo_accessor($field);
+                    subname("${class}::$mutator_name", $mutator) if defined &subname;
+                    *{"${class}::$mutator_name"} = $mutator;
                 }
             }
         }
