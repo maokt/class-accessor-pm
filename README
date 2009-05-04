@@ -28,20 +28,18 @@ DESCRIPTION
 BENCHMARKS
 
     accessors:
-                 Rate   Basic Average    Fast  Faster  Direct
-    Basic    189150/s      --    -42%    -51%    -55%    -89%
-    Average  327679/s     73%      --    -16%    -22%    -82%
-    Fast     389212/s    106%     19%      --     -8%    -78%
-    Faster   421646/s    123%     29%      8%      --    -76%
-    Direct  1771243/s    836%    441%    355%    320%      --
+              Rate  Basic   Fast Faster Direct
+    Basic   367589/s     --   -51%   -55%   -89%
+    Fast    747964/s   103%     --    -9%   -77%
+    Faster  819199/s   123%    10%     --   -75%
+    Direct 3245887/s   783%   334%   296%     --
 
     mutators:
-                 Rate   Basic Average    Fast  Faster  Direct
-    Basic    173769/s      --    -34%    -53%    -59%    -90%
-    Average  263046/s     51%      --    -29%    -38%    -85%
-    Fast     371158/s    114%     41%      --    -13%    -78%
-    Faster   425821/s    145%     62%     15%      --    -75%
-    Direct  1699081/s    878%    546%    358%    299%      --
+              Rate    Acc   Fast Faster Direct
+    Acc     265564/s     --   -54%   -63%   -91%
+    Fast    573439/s   116%     --   -21%   -80%
+    Faster  724710/s   173%    26%     --   -75%
+    Direct 2860979/s   977%   399%   295%     --
 
 AUTHORS
 
