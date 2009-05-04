@@ -1,3 +1,9 @@
+0.33 Tue May  5 00:15:09 JST 2009
+    - small cleanups to fix RT#45592 and RT#43493
+
+0.32 Tue Jun 10 10:31:06 JST 2008
+    - use Sub::Name to give names to anon subs to fix RT#17856
+
 0.31 Wed Jul 11 23:03:47 JST 2007
     - applied performance patch from RUZ
 
