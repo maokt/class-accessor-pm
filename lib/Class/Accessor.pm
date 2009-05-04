@@ -153,7 +153,16 @@ if (eval { require Sub::Name }) {
     no strict 'refs';
 
     sub _export_accessor {
-        my ($target, $name, $sub) = @_;
+        my ($target, $sub) = @_;
+        subname($target, $sub) if defined &subname;
+        *{$target} = $sub;
+    }
+
+    sub follow_best_practice {
+        my($self) = @_;
+        my $class = ref $self || $self;
+        *{"${class}::accessor_name_for"}  = \&best_practice_accessor_name_for;
+        *{"${class}::mutator_name_for"}  = \&best_practice_mutator_name_for;
     }
 
     sub _mk_accessors {
@@ -178,7 +187,9 @@ if (eval { require Sub::Name }) {
                 } else {
                     $accessor = $self->make_wo_accessor($field);
                 }
+                my $fullname = "${class}::$accessor_name";
                 unless (defined &{"${class}::$accessor_name"}) {
+                    _export_accessor($name, $accessor);
                     subname("${class}::$accessor_name", $accessor) if defined &subname;
                     $named = 1;
                     *{"${class}::$accessor_name"} = $accessor;
@@ -186,6 +197,7 @@ if (eval { require Sub::Name }) {
                 if ($accessor_name eq $field) {
                     # the old behaviour
                     my $alias = "_${field}_accessor";
+                    _export_accessor($name, $accessor);
                     subname("${class}::$alias", $accessor) if defined &subname and not $named;
                     *{"${class}::$alias"} = $accessor unless defined &{"${class}::$alias"};
                 }
@@ -204,14 +216,9 @@ if (eval { require Sub::Name }) {
         }
     }
 
-    sub follow_best_practice {
-        my($self) = @_;
-        my $class = ref $self || $self;
-        *{"${class}::accessor_name_for"}  = \&best_practice_accessor_name_for;
-        *{"${class}::mutator_name_for"}  = \&best_practice_mutator_name_for;
-    }
-
 }
+
+
 
 =head2 mk_ro_accessors
 
