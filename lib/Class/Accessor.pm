@@ -11,6 +11,7 @@ $Class::Accessor::VERSION = '0.33';
 
   package Foo;
   use base qw(Class::Accessor);
+  Foo->follow_best_practice;
   Foo->mk_accessors(qw(name role salary));
 
   # Meanwhile, in a nearby piece of code!
@@ -71,6 +72,16 @@ The basic set up is very simple:
 
 Done.  Foo now has simple far(), bar() and car() accessors
 defined.
+
+Alternatively, if you want to follow Damian's I<best practice> guidelines 
+you can use:
+
+    package Foo;
+    use base qw(Class::Accessor);
+    Foo->follow_best_practice;
+    Foo->mk_accessors( qw(far bar car) );
+
+B<Note:> you must call C<follow_best_practice> before calling C<mk_accessors>.
 
 =head2 What Makes This Different?
 
@@ -302,6 +313,8 @@ with the prefix set_ and get_ to make it explicit what you intend to do.  If you
 want to create those accessor methods instead of the default ones, call:
 
     __PACKAGE__->follow_best_practice
+
+B<before> you call mk_accessors.
 
 =head2 accessor_name_for / mutator_name_for
 
@@ -571,7 +584,7 @@ Here's a simple example of altering the behavior of your accessors.
 
     package Foo;
     use base qw(Class::Accessor);
-    Foo->mk_accessor(qw(this that up down));
+    Foo->mk_accessors(qw(this that up down));
 
     sub get {
         my $self = shift;
