@@ -13,3 +13,4 @@ t/aliases.t
 t/bestpractice.t
 t/croak.t
 t/getset.t
+t/caller.t
