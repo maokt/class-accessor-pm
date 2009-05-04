@@ -163,12 +163,6 @@ if (eval { require Sub::Name }) {
 {
     no strict 'refs';
 
-    sub _export_accessor {
-        my ($target, $sub) = @_;
-        subname($target, $sub) if defined &subname;
-        *{$target} = $sub;
-    }
-
     sub follow_best_practice {
         my($self) = @_;
         my $class = ref $self || $self;
@@ -190,7 +184,6 @@ if (eval { require Sub::Name }) {
             }
             if ($accessor_name eq $mutator_name) {
                 my $accessor;
-                my $named = 0;
                 if ($ra && $wa) {
                     $accessor = $self->make_accessor($field);
                 } elsif ($ra) {
@@ -199,29 +192,30 @@ if (eval { require Sub::Name }) {
                     $accessor = $self->make_wo_accessor($field);
                 }
                 my $fullname = "${class}::$accessor_name";
-                unless (defined &{"${class}::$accessor_name"}) {
-                    _export_accessor($name, $accessor);
-                    subname("${class}::$accessor_name", $accessor) if defined &subname;
-                    $named = 1;
-                    *{"${class}::$accessor_name"} = $accessor;
+                my $subnamed = 0;
+                unless (defined &{$fullname}) {
+                    subname($fullname, $accessor) if defined &subname;
+                    $subnamed = 1;
+                    *{$fullname} = $accessor;
                 }
                 if ($accessor_name eq $field) {
                     # the old behaviour
-                    my $alias = "_${field}_accessor";
-                    _export_accessor($name, $accessor);
-                    subname("${class}::$alias", $accessor) if defined &subname and not $named;
-                    *{"${class}::$alias"} = $accessor unless defined &{"${class}::$alias"};
+                    my $alias = "${class}::_${field}_accessor";
+                    subname($alias, $accessor) if defined &subname and not $subnamed;
+                    *{$alias} = $accessor unless defined &{$alias};
                 }
             } else {
-                if ($ra and not defined &{"${class}::$accessor_name"}) {
+                my $fullaccname = "${class}::$accessor_name";
+                my $fullmutname = "${class}::$mutator_name";
+                if ($ra and not defined &{$fullaccname}) {
                     my $accessor = $self->make_ro_accessor($field);
-                    subname("${class}::$accessor_name", $accessor) if defined &subname;
-                    *{"${class}::$accessor_name"} = $accessor;
+                    subname($fullaccname, $accessor) if defined &subname;
+                    *{$fullaccname} = $accessor;
                 }
-                if ($wa and not defined &{"${class}::$mutator_name"}) {
+                if ($wa and not defined &{$fullmutname}) {
                     my $mutator = $self->make_wo_accessor($field);
-                    subname("${class}::$mutator_name", $mutator) if defined &subname;
-                    *{"${class}::$mutator_name"} = $mutator;
+                    subname($fullmutname, $mutator) if defined &subname;
+                    *{$fullmutname} = $mutator;
                 }
             }
         }
