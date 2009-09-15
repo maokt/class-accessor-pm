@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Class-Accessor
-version:             0.33
+version:             0.34
 abstract:            ~
 license:             perl
 author:              
