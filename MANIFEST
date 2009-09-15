@@ -10,6 +10,7 @@ META.yml
 README
 t/accessors.t
 t/aliases.t
+t/antlers.t
 t/bestpractice.t
 t/croak.t
 t/getset.t

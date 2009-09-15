@@ -1,7 +1,237 @@
 package Class::Accessor;
 require 5.00502;
 use strict;
-$Class::Accessor::VERSION = '0.33';
+$Class::Accessor::VERSION = '0.34';
+
+sub new {
+    my($proto, $fields) = @_;
+    my($class) = ref $proto || $proto;
+
+    $fields = {} unless defined $fields;
+
+    # make a copy of $fields.
+    bless {%$fields}, $class;
+}
+
+sub mk_accessors {
+    my($self, @fields) = @_;
+
+    $self->_mk_accessors('rw', @fields);
+}
+
+if (eval { require Sub::Name }) {
+    Sub::Name->import;
+}
+
+{
+    no strict 'refs';
+
+    sub import {
+        my ($class, @what) = @_;
+        my $caller = caller;
+        for (@what) {
+            if (/^(?:antlers|moose-?like)$/i) {
+                *{"${caller}::has"} = sub {
+                    my ($f, %args) = @_;
+                    $caller->_mk_accessors(($args{is}||"rw"), $f);
+                };
+                *{"${caller}::extends"} = sub {
+                    @{"${caller}::ISA"} = @_;
+                    unless (grep $_->can("_mk_accessors"), @_) {
+                        push @{"${caller}::ISA"}, $class;
+                    }
+                };
+                # we'll use their @ISA as a default, in case it happens to be
+                # set already
+                &{"${caller}::extends"}(@{"${caller}::ISA"});
+            }
+        }
+    }
+
+    sub follow_best_practice {
+        my($self) = @_;
+        my $class = ref $self || $self;
+        *{"${class}::accessor_name_for"}  = \&best_practice_accessor_name_for;
+        *{"${class}::mutator_name_for"}  = \&best_practice_mutator_name_for;
+    }
+
+    sub _mk_accessors {
+        my($self, $access, @fields) = @_;
+        my $class = ref $self || $self;
+        my $ra = $access eq 'rw' || $access eq 'ro';
+        my $wa = $access eq 'rw' || $access eq 'wo';
+
+        foreach my $field (@fields) {
+            my $accessor_name = $self->accessor_name_for($field);
+            my $mutator_name = $self->mutator_name_for($field);
+            if( $accessor_name eq 'DESTROY' or $mutator_name eq 'DESTROY' ) {
+                $self->_carp("Having a data accessor named DESTROY  in '$class' is unwise.");
+            }
+            if ($accessor_name eq $mutator_name) {
+                my $accessor;
+                if ($ra && $wa) {
+                    $accessor = $self->make_accessor($field);
+                } elsif ($ra) {
+                    $accessor = $self->make_ro_accessor($field);
+                } else {
+                    $accessor = $self->make_wo_accessor($field);
+                }
+                my $fullname = "${class}::$accessor_name";
+                my $subnamed = 0;
+                unless (defined &{$fullname}) {
+                    subname($fullname, $accessor) if defined &subname;
+                    $subnamed = 1;
+                    *{$fullname} = $accessor;
+                }
+                if ($accessor_name eq $field) {
+                    # the old behaviour
+                    my $alias = "${class}::_${field}_accessor";
+                    subname($alias, $accessor) if defined &subname and not $subnamed;
+                    *{$alias} = $accessor unless defined &{$alias};
+                }
+            } else {
+                my $fullaccname = "${class}::$accessor_name";
+                my $fullmutname = "${class}::$mutator_name";
+                if ($ra and not defined &{$fullaccname}) {
+                    my $accessor = $self->make_ro_accessor($field);
+                    subname($fullaccname, $accessor) if defined &subname;
+                    *{$fullaccname} = $accessor;
+                }
+                if ($wa and not defined &{$fullmutname}) {
+                    my $mutator = $self->make_wo_accessor($field);
+                    subname($fullmutname, $mutator) if defined &subname;
+                    *{$fullmutname} = $mutator;
+                }
+            }
+        }
+    }
+
+}
+
+sub mk_ro_accessors {
+    my($self, @fields) = @_;
+
+    $self->_mk_accessors('ro', @fields);
+}
+
+sub mk_wo_accessors {
+    my($self, @fields) = @_;
+
+    $self->_mk_accessors('wo', @fields);
+}
+
+sub best_practice_accessor_name_for {
+    my ($class, $field) = @_;
+    return "get_$field";
+}
+
+sub best_practice_mutator_name_for {
+    my ($class, $field) = @_;
+    return "set_$field";
+}
+
+sub accessor_name_for {
+    my ($class, $field) = @_;
+    return $field;
+}
+
+sub mutator_name_for {
+    my ($class, $field) = @_;
+    return $field;
+}
+
+sub set {
+    my($self, $key) = splice(@_, 0, 2);
+
+    if(@_ == 1) {
+        $self->{$key} = $_[0];
+    }
+    elsif(@_ > 1) {
+        $self->{$key} = [@_];
+    }
+    else {
+        $self->_croak("Wrong number of arguments received");
+    }
+}
+
+sub get {
+    my $self = shift;
+
+    if(@_ == 1) {
+        return $self->{$_[0]};
+    }
+    elsif( @_ > 1 ) {
+        return @{$self}{@_};
+    }
+    else {
+        $self->_croak("Wrong number of arguments received");
+    }
+}
+
+sub make_accessor {
+    my ($class, $field) = @_;
+
+    return sub {
+        my $self = shift;
+
+        if(@_) {
+            return $self->set($field, @_);
+        } else {
+            return $self->get($field);
+        }
+    };
+}
+
+sub make_ro_accessor {
+    my($class, $field) = @_;
+
+    return sub {
+        my $self = shift;
+
+        if (@_) {
+            my $caller = caller;
+            $self->_croak("'$caller' cannot alter the value of '$field' on objects of class '$class'");
+        }
+        else {
+            return $self->get($field);
+        }
+    };
+}
+
+sub make_wo_accessor {
+    my($class, $field) = @_;
+
+    return sub {
+        my $self = shift;
+
+        unless (@_) {
+            my $caller = caller;
+            $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
+        }
+        else {
+            return $self->set($field, @_);
+        }
+    };
+}
+
+
+use Carp ();
+
+sub _carp {
+    my ($self, $msg) = @_;
+    Carp::carp($msg || $self);
+    return;
+}
+
+sub _croak {
+    my ($self, $msg) = @_;
+    Carp::croak($msg || $self);
+    return;
+}
+
+1;
+
+__END__
 
 =head1 NAME
 
@@ -13,6 +243,14 @@ $Class::Accessor::VERSION = '0.33';
   use base qw(Class::Accessor);
   Foo->follow_best_practice;
   Foo->mk_accessors(qw(name role salary));
+
+  # or if you prefer a Moose-like interface...
+ 
+  package Foo;
+  use Class::Accessor "antlers";
+  has name => ( is => "rw", isa => "Str" );
+  has role => ( is => "rw", isa => "Str" );
+  has salary => ( is => "rw", isa => "Num" );
 
   # Meanwhile, in a nearby piece of code!
   # Class::Accessor provides new().
@@ -83,17 +321,23 @@ you can use:
 
 B<Note:> you must call C<follow_best_practice> before calling C<mk_accessors>.
 
-=head2 What Makes This Different?
+=head2 Moose-like
 
-What makes this module special compared to all the other method
-generating modules (L<"SEE ALSO">)?  By overriding the get() and set()
-methods you can alter the behavior of the accessors class-wide.  Also,
-the accessors are implemented as closures which should cost a bit less
-memory than most other solutions which generate a new method for each
-accessor.
+By popular demand we now have a simple Moose-like interface.  You can now do:
 
+    package Foo;
+    use Class::Accessor "antlers";
+    has far => ( is => "rw" );
+    has bar => ( is => "rw" );
+    has car => ( is => "rw" );
 
-=head1 METHODS
+Currently only the C<is> attribute is supported.
+
+=head1 CONSTRUCTOR
+
+Class::Accessor provides a basic constructor, C<new>.  It generates a
+hash-based object and can be called as either a class method or an
+object method.  
 
 =head2 new
 
@@ -102,10 +346,6 @@ accessor.
 
     my $obj = Foo->new(\%fields);
     my $obj = $other_obj->new(\%fields);
-
-Class::Accessor provides a basic constructor.  It generates a
-hash-based object and can be called as either a class method or an
-object method.  
 
 It takes an optional %fields hash which is used to initialize the
 object (handy if you use read-only accessors).  The fields of the hash
@@ -119,19 +359,25 @@ correspond to the names of your accessors, so...
     print $obj->foo;    # 42
 
 however %fields can contain anything, new() will shove them all into
-your object.  Don't like it?  Override it.
+your object.
 
-=cut
+=head1 MAKING ACCESSORS
 
-sub new {
-    my($proto, $fields) = @_;
-    my($class) = ref $proto || $proto;
+=head2 follow_best_practice
 
-    $fields = {} unless defined $fields;
+In Damian's Perl Best Practices book he recommends separate get and set methods
+with the prefix set_ and get_ to make it explicit what you intend to do.  If you
+want to create those accessor methods instead of the default ones, call:
 
-    # make a copy of $fields.
-    bless {%$fields}, $class;
-}
+    __PACKAGE__->follow_best_practice
+
+B<before> you call any of the accessor-making methods.
+
+=head2 accessor_name_for / mutator_name_for
+
+You may have your own crazy ideas for the names of the accessors, so you can
+make those happen by overriding C<accessor_name_for> and C<mutator_name_for> in
+your subclass.  (I copied that idea from Class::DBI.)
 
 =head2 mk_accessors
 
@@ -147,83 +393,6 @@ example:
 
 See L<CAVEATS AND TRICKS/"Overriding autogenerated accessors">
 for details.
-
-=cut
-
-sub mk_accessors {
-    my($self, @fields) = @_;
-
-    $self->_mk_accessors('rw', @fields);
-}
-
-if (eval { require Sub::Name }) {
-    Sub::Name->import;
-}
-
-{
-    no strict 'refs';
-
-    sub follow_best_practice {
-        my($self) = @_;
-        my $class = ref $self || $self;
-        *{"${class}::accessor_name_for"}  = \&best_practice_accessor_name_for;
-        *{"${class}::mutator_name_for"}  = \&best_practice_mutator_name_for;
-    }
-
-    sub _mk_accessors {
-        my($self, $access, @fields) = @_;
-        my $class = ref $self || $self;
-        my $ra = $access eq 'rw' || $access eq 'ro';
-        my $wa = $access eq 'rw' || $access eq 'wo';
-
-        foreach my $field (@fields) {
-            my $accessor_name = $self->accessor_name_for($field);
-            my $mutator_name = $self->mutator_name_for($field);
-            if( $accessor_name eq 'DESTROY' or $mutator_name eq 'DESTROY' ) {
-                $self->_carp("Having a data accessor named DESTROY  in '$class' is unwise.");
-            }
-            if ($accessor_name eq $mutator_name) {
-                my $accessor;
-                if ($ra && $wa) {
-                    $accessor = $self->make_accessor($field);
-                } elsif ($ra) {
-                    $accessor = $self->make_ro_accessor($field);
-                } else {
-                    $accessor = $self->make_wo_accessor($field);
-                }
-                my $fullname = "${class}::$accessor_name";
-                my $subnamed = 0;
-                unless (defined &{$fullname}) {
-                    subname($fullname, $accessor) if defined &subname;
-                    $subnamed = 1;
-                    *{$fullname} = $accessor;
-                }
-                if ($accessor_name eq $field) {
-                    # the old behaviour
-                    my $alias = "${class}::_${field}_accessor";
-                    subname($alias, $accessor) if defined &subname and not $subnamed;
-                    *{$alias} = $accessor unless defined &{$alias};
-                }
-            } else {
-                my $fullaccname = "${class}::$accessor_name";
-                my $fullmutname = "${class}::$mutator_name";
-                if ($ra and not defined &{$fullaccname}) {
-                    my $accessor = $self->make_ro_accessor($field);
-                    subname($fullaccname, $accessor) if defined &subname;
-                    *{$fullaccname} = $accessor;
-                }
-                if ($wa and not defined &{$fullmutname}) {
-                    my $mutator = $self->make_wo_accessor($field);
-                    subname($fullmutname, $mutator) if defined &subname;
-                    *{$fullmutname} = $mutator;
-                }
-            }
-        }
-    }
-
-}
-
-
 
 =head2 mk_ro_accessors
 
@@ -242,14 +411,6 @@ set().
     print $foo->foo;  # ok, prints whatever the value of $foo->{foo} is
     $foo->foo(42);    # BOOM!  Naughty you.
 
-
-=cut
-
-sub mk_ro_accessors {
-    my($self, @fields) = @_;
-
-    $self->_mk_accessors('ro', @fields);
-}
 
 =head2 mk_wo_accessors
 
@@ -271,13 +432,34 @@ for orthoginality and because it's easy to implement.
     $foo->foo(42);      # OK.  Sets $self->{foo} = 42
     print $foo->foo;    # BOOM!  Can't read from this accessor.
 
-=cut
+=head1 Moose!
 
-sub mk_wo_accessors {
-    my($self, @fields) = @_;
+If you prefer a Moose-like interface to create accessors, you can use C<has> by
+importing this module like this:
 
-    $self->_mk_accessors('wo', @fields);
-}
+  use Class::Accessor "antlers";
+
+or
+
+  use Class::Accessor "moose-like";
+
+Then you can declare accessors like this:
+
+  has alpha => ( is => "rw", isa => "Str" );
+  has beta  => ( is => "ro", isa => "Str" );
+  has gamma => ( is => "wo", isa => "Str" );
+
+Currently only the C<is> attribute is supported.  And our C<is> also supports
+the "wo" value to make a write-only accessor.
+
+If you are using the Moose-like interface then you should use the C<extends>
+rather than tweaking your C<@ISA> directly.  Basically, replace
+
+  @ISA = qw/Foo Bar/;
+
+with
+
+  extends(qw/Foo Bar/);
 
 =head1 DETAILS
 
@@ -300,44 +482,6 @@ value or get a value and calls the appropriate method.
 Class::Accessor provides default get() and set() methods which
 your class can override.  They're detailed later.
 
-=head2 follow_best_practice
-
-In Damian's Perl Best Practices book he recommends separate get and set methods
-with the prefix set_ and get_ to make it explicit what you intend to do.  If you
-want to create those accessor methods instead of the default ones, call:
-
-    __PACKAGE__->follow_best_practice
-
-B<before> you call mk_accessors.
-
-=head2 accessor_name_for / mutator_name_for
-
-You may have your own crazy ideas for the names of the accessors, so you can
-make those happen by overriding C<accessor_name_for> and C<mutator_name_for> in
-your subclass.  (I copied that idea from Class::DBI.)
-
-=cut
-
-sub best_practice_accessor_name_for {
-    my ($class, $field) = @_;
-    return "get_$field";
-}
-
-sub best_practice_mutator_name_for {
-    my ($class, $field) = @_;
-    return "set_$field";
-}
-
-sub accessor_name_for {
-    my ($class, $field) = @_;
-    return $field;
-}
-
-sub mutator_name_for {
-    my ($class, $field) = @_;
-    return $field;
-}
-
 =head2 Modifying the behavior of the accessor
 
 Rather than actually modifying the accessor itself, it is much more
@@ -355,22 +499,6 @@ set() defines how generally one stores data in the object.
 
 override this method to change how data is stored by your accessors.
 
-=cut
-
-sub set {
-    my($self, $key) = splice(@_, 0, 2);
-
-    if(@_ == 1) {
-        $self->{$key} = $_[0];
-    }
-    elsif(@_ > 1) {
-        $self->{$key} = [@_];
-    }
-    else {
-        $self->_croak("Wrong number of arguments received");
-    }
-}
-
 =head2 get
 
     $value  = $obj->get($key);
@@ -379,22 +507,6 @@ sub set {
 get() defines how data is retreived from your objects.
 
 override this method to change how it is retreived.
-
-=cut
-
-sub get {
-    my $self = shift;
-
-    if(@_ == 1) {
-        return $self->{$_[0]};
-    }
-    elsif( @_ > 1 ) {
-        return @{$self}{@_};
-    }
-    else {
-        $self->_croak("Wrong number of arguments received");
-    }
-}
 
 =head2 make_accessor
 
@@ -406,24 +518,6 @@ $field.  It calls get() and set().
 If you wish to change the behavior of your accessors, try overriding
 get() and set() before you start mucking with make_accessor().
 
-=cut
-
-sub make_accessor {
-    my ($class, $field) = @_;
-
-    # Build a closure around $field.
-    return sub {
-        my $self = shift;
-
-        if(@_) {
-            return $self->set($field, @_);
-        }
-        else {
-            return $self->get($field);
-        }
-    };
-}
-
 =head2 make_ro_accessor
 
     $read_only_accessor = __PACKAGE__->make_ro_accessor($field);
@@ -432,24 +526,6 @@ Generates a subroutine refrence which acts as a read-only accessor for
 the given $field.  It only calls get().
 
 Override get() to change the behavior of your accessors.
-
-=cut
-
-sub make_ro_accessor {
-    my($class, $field) = @_;
-
-    return sub {
-        my $self = shift;
-
-        if (@_) {
-            my $caller = caller;
-            $self->_croak("'$caller' cannot alter the value of '$field' on objects of class '$class'");
-        }
-        else {
-            return $self->get($field);
-        }
-    };
-}
 
 =head2 make_wo_accessor
 
@@ -460,45 +536,11 @@ Generates a subroutine refrence which acts as a write-only accessor
 
 Override set() to change the behavior of your accessors.
 
-=cut
-
-sub make_wo_accessor {
-    my($class, $field) = @_;
-
-    return sub {
-        my $self = shift;
-
-        unless (@_) {
-            my $caller = caller;
-            $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
-        }
-        else {
-            return $self->set($field, @_);
-        }
-    };
-}
-
 =head1 EXCEPTIONS
 
 If something goes wrong Class::Accessor will warn or die by calling Carp::carp
 or Carp::croak.  If you don't like this you can override _carp() and _croak() in
 your subclass and do whatever else you want.
-
-=cut
-
-use Carp ();
-
-sub _carp {
-    my ($self, $msg) = @_;
-    Carp::carp($msg || $self);
-    return;
-}
-
-sub _croak {
-    my ($self, $msg) = @_;
-    Carp::croak($msg || $self);
-    return;
-}
 
 =head1 EFFICIENCY
 
@@ -670,7 +712,7 @@ instead of the expected SUPER::email().
 
 =head1 AUTHORS
 
-Copyright 2007 Marty Pauley <marty+perl@kasei.com>
+Copyright 2009 Marty Pauley <marty+perl@kasei.com>
 
 This program is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.  That means either (a) the GNU General Public
@@ -686,17 +728,17 @@ Liz and RUZ for performance tweaks.
 
 Tels, for his big feature request/bug report.
 
+Various presenters at YAPC::Asia 2009 for criticising the non-Moose interface.
 
 =head1 SEE ALSO
 
-L<Class::Accessor::Fast>
+See L<Class::Accessor::Fast> and L<Class::Accessor::Faster> if speed is more
+important than flexibility.
 
 These are some modules which do similar things in different ways
 L<Class::Struct>, L<Class::Methodmaker>, L<Class::Generate>,
-L<Class::Class>, L<Class::Contract>
+L<Class::Class>, L<Class::Contract>, L<Moose>, L<Mouse>
 
-L<Class::DBI> for an example of this module in use.
+See L<Class::DBI> for an example of this module in use.
 
 =cut
-
-1;

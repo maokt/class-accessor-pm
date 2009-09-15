@@ -25,31 +25,21 @@ DESCRIPTION
 
     Done. My::Class now has simple foo(), bar() and car() accessors defined.
 
-BENCHMARKS
+    If you prefer a Moose-like interface you can do this instead:
 
-    accessors:
-              Rate  Basic   Fast Faster Direct
-    Basic   367589/s     --   -51%   -55%   -89%
-    Fast    747964/s   103%     --    -9%   -77%
-    Faster  819199/s   123%    10%     --   -75%
-    Direct 3245887/s   783%   334%   296%     --
+        package My::Class;
+        use Class::Accessor "moose-like";
+        has foo => ( is => "rw" );
+        has bar => ( is => "rw" );
+        has car => ( is => "rw" );
 
-    mutators:
-              Rate    Acc   Fast Faster Direct
-    Acc     265564/s     --   -54%   -63%   -91%
-    Fast    573439/s   116%     --   -21%   -80%
-    Faster  724710/s   173%    26%     --   -75%
-    Direct 2860979/s   977%   399%   295%     --
+    Done, again.
 
-AUTHORS
+AUTHOR
 
     Copyright 2009 Marty Pauley <marty+perl@kasei.com>
 
     This program is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself. That means either (a) the GNU
     General Public License or (b) the Artistic License.
-
-ORIGINAL AUTHOR
-
-    Michael G Schwern <schwern@pobox.com>
 
