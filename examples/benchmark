@@ -1,5 +1,10 @@
 #!/usr/bin/perl -w
 
+BEGIN {
+    $ENV{MOO_XS_DISABLE} = "no cheating";
+    $ENV{MOUSE_PUREPERL} = "no cheating";
+}
+
 package Bench::Base;
 
 sub new { 
@@ -11,28 +16,43 @@ package Bench::Direct;
 use base qw(Bench::Base);
 
 package Bench::Normal;
-use base qw(Class::Accessor);
-__PACKAGE__->mk_accessors(qw(test));
-
+use Class::Accessor "moose-like";
+has test => (is => "rw");
 
 package Bench::Fast;
-use base qw(Class::Accessor::Fast);
-__PACKAGE__->mk_accessors(qw(test));
+use Class::Accessor::Fast "moose-like";
+has test => (is => "rw");
 
 package Bench::Faster;
-use base qw(Class::Accessor::Faster);
-__PACKAGE__->mk_accessors(qw(test));
+use Class::Accessor::Faster "antlers";
+has test => (is => "rw");
+
+package Bench::Moose;
+use Moose;
+has test => (is => "rw");
+
+package Bench::Mouse;
+use Mouse;
+has test => (is => "rw");
+
+package Bench::Moo;
+use Moo;
+has test => (is => "rw");
 
 package main;
 use strict;
 use Benchmark 'cmpthese';
+use Test::More tests => 12;
 
 my $tmp;
 my $direct = Bench::Direct->new({ test => 23 });
 my %accessor = ( Direct => sub { $tmp = $direct->{test}; } );
 my %mutator = ( Direct => sub { $direct->{test} = 42; } );
-for my $p (qw/Normal Fast Faster/) {
+for my $p (qw/Normal Fast Faster Moose Mouse Moo/) {
     my $o = "Bench::$p"->new({ test => 23 });
+    is $o->test, 23, "$p init";
+    $o->test(24);
+    is $o->test, 24, "$p set";
     $accessor{$p} = sub { $tmp = $o->test; };
     $mutator{$p}  = sub { $o->test(42); };
 }
