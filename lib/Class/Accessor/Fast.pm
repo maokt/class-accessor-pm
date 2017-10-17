@@ -58,7 +58,7 @@ Class::Accessor::Fast - Faster, but less expandable, accessors
 =head1 DESCRIPTION
 
 This is a faster but less expandable version of Class::Accessor.
-Class::Accessor's generated accessors require two method calls to accompish
+Class::Accessor's generated accessors require two method calls to accomplish
 their task (one for the accessor, another for get() or set()).
 Class::Accessor::Fast eliminates calling set()/get() and does the access itself,
 resulting in a somewhat faster accessor.

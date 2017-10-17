@@ -422,7 +422,7 @@ it will throw an exception.  It only uses set() and not get().
 
 B<NOTE> I'm not entirely sure why this is useful, but I'm sure someone
 will need it.  If you've found a use, let me know.  Right now it's here
-for orthoginality and because it's easy to implement.
+for orthogonality and because it's easy to implement.
 
     package Foo;
     use base qw(Class::Accessor);
@@ -504,9 +504,9 @@ override this method to change how data is stored by your accessors.
     $value  = $obj->get($key);
     @values = $obj->get(@keys);
 
-get() defines how data is retreived from your objects.
+get() defines how data is retrieved from your objects.
 
-override this method to change how it is retreived.
+override this method to change how it is retrieved.
 
 =head2 make_accessor
 
@@ -522,16 +522,16 @@ get() and set() before you start mucking with make_accessor().
 
     $read_only_accessor = __PACKAGE__->make_ro_accessor($field);
 
-Generates a subroutine refrence which acts as a read-only accessor for
+Generates a subroutine reference which acts as a read-only accessor for
 the given $field.  It only calls get().
 
 Override get() to change the behavior of your accessors.
 
 =head2 make_wo_accessor
 
-    $read_only_accessor = __PACKAGE__->make_wo_accessor($field);
+    $write_only_accessor = __PACKAGE__->make_wo_accessor($field);
 
-Generates a subroutine refrence which acts as a write-only accessor
+Generates a subroutine reference which acts as a write-only accessor
 (mutator) for the given $field.  It only calls set().
 
 Override set() to change the behavior of your accessors.
