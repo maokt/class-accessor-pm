@@ -245,7 +245,7 @@ __END__
   Foo->mk_accessors(qw(name role salary));
 
   # or if you prefer a Moose-like interface...
- 
+
   package Foo;
   use Class::Accessor "antlers";
   has name => ( is => "rw", isa => "Str" );
@@ -258,10 +258,10 @@ __END__
 
   my $job = $mp->role;  # gets $mp->{role}
   $mp->salary(400000);  # sets $mp->{salary} = 400000 # I wish
-  
+
   # like my @info = @{$mp}{qw(name role)}
   my @info = $mp->get(qw(name role));
-  
+
   # $mp->{salary} = 400000
   $mp->set('salary', 400000);
 
@@ -311,7 +311,7 @@ The basic set up is very simple:
 Done.  Foo now has simple far(), bar() and car() accessors
 defined.
 
-Alternatively, if you want to follow Damian's I<best practice> guidelines 
+Alternatively, if you want to follow Damian's I<best practice> guidelines
 you can use:
 
     package Foo;
@@ -337,7 +337,7 @@ Currently only the C<is> attribute is supported.
 
 Class::Accessor provides a basic constructor, C<new>.  It generates a
 hash-based object and can be called as either a class method or an
-object method.  
+object method.
 
 =head2 new
 
@@ -529,7 +529,7 @@ Override get() to change the behavior of your accessors.
 
 =head2 make_wo_accessor
 
-    $read_only_accessor = __PACKAGE__->make_wo_accessor($field);
+    $write_only_accessor = __PACKAGE__->make_wo_accessor($field);
 
 Generates a subroutine refrence which acts as a write-only accessor
 (mutator) for the given $field.  It only calls set().
@@ -588,7 +588,7 @@ Here's an example of generating an accessor for every public field of
 your class.
 
     package Altoids;
-    
+
     use base qw(Class::Accessor Class::Fields);
     use fields qw(curiously strong mints);
     Altoids->mk_accessors( Altoids->show_fields('Public') );
@@ -604,7 +604,7 @@ your class.
     $tin->curiously('Curiouser and curiouser');
     print $tin->{curiously};    # prints 'Curiouser and curiouser'
 
-    
+
     # Subclassing works, too.
     package Mint::Snuff;
     use base qw(Altoids);
