@@ -1,7 +1,7 @@
 package Class::Accessor::Fast;
 use base 'Class::Accessor';
 use strict;
-$Class::Accessor::Fast::VERSION = '0.34';
+$Class::Accessor::Fast::VERSION = $Class::Accessor::VERSION;
 
 sub make_accessor {
     my($class, $field) = @_;
@@ -76,7 +76,7 @@ L<Class::Accessor/EFFICIENCY> for an efficiency comparison.
 
 =head1 AUTHORS
 
-Copyright 2007 Marty Pauley <marty+perl@kasei.com>
+Copyright 2017 Marty Pauley <marty+perl@martian.org>
 
 This program is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.  That means either (a) the GNU General Public

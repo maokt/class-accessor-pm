@@ -1,3 +1,6 @@
+0.50 2017-10-17
+    - fixed typos for RT#61304 and RT#86422
+
 0.34 Sat Sep 12 21:50:26 JST 2009
     - add a Moose-like interface: I can haz "has"
 

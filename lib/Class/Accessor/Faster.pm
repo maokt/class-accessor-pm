@@ -1,7 +1,7 @@
 package Class::Accessor::Faster;
 use base 'Class::Accessor';
 use strict;
-$Class::Accessor::Faster::VERSION = '0.34';
+$Class::Accessor::Faster::VERSION = $Class::Accessor::VERSION;
 
 my %slot;
 sub _slot {
@@ -88,7 +88,7 @@ Read the documentation for Class::Accessor for more info.
 
 =head1 AUTHORS
 
-Copyright 2007 Marty Pauley <marty+perl@kasei.com>
+Copyright 2017 Marty Pauley <marty+perl@martian.org>
 
 This program is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.  That means either (a) the GNU General Public

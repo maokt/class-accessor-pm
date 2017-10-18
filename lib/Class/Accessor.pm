@@ -1,7 +1,7 @@
 package Class::Accessor;
 require 5.00502;
 use strict;
-$Class::Accessor::VERSION = '0.34';
+$Class::Accessor::VERSION = '0.50';
 
 sub new {
     my($proto, $fields) = @_;
@@ -712,7 +712,7 @@ instead of the expected SUPER::email().
 
 =head1 AUTHORS
 
-Copyright 2009 Marty Pauley <marty+perl@kasei.com>
+Copyright 2017 Marty Pauley <marty+perl@martian.org>
 
 This program is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.  That means either (a) the GNU General Public
