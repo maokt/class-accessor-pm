@@ -529,7 +529,7 @@ Override get() to change the behavior of your accessors.
 
 =head2 make_wo_accessor
 
-    $read_only_accessor = __PACKAGE__->make_wo_accessor($field);
+    $write_only_accessor = __PACKAGE__->make_wo_accessor($field);
 
 Generates a subroutine reference which acts as a write-only accessor
 (mutator) for the given $field.  It only calls set().
