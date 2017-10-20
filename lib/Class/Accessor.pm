@@ -4,13 +4,11 @@ use strict;
 $Class::Accessor::VERSION = '0.50';
 
 sub new {
-    my($proto, $fields) = @_;
-    my($class) = ref $proto || $proto;
-
-    $fields = {} unless defined $fields;
-
-    # make a copy of $fields.
-    bless {%$fields}, $class;
+    return bless
+        defined $_[1]
+            ? {%{$_[1]}} # make a copy of $fields.
+            : {},
+        ref $_[0] || $_[0];
 }
 
 sub mk_accessors {
@@ -245,7 +243,7 @@ __END__
   Foo->mk_accessors(qw(name role salary));
 
   # or if you prefer a Moose-like interface...
- 
+
   package Foo;
   use Class::Accessor "antlers";
   has name => ( is => "rw", isa => "Str" );
@@ -258,10 +256,10 @@ __END__
 
   my $job = $mp->role;  # gets $mp->{role}
   $mp->salary(400000);  # sets $mp->{salary} = 400000 # I wish
-  
+
   # like my @info = @{$mp}{qw(name role)}
   my @info = $mp->get(qw(name role));
-  
+
   # $mp->{salary} = 400000
   $mp->set('salary', 400000);
 
@@ -311,7 +309,7 @@ The basic set up is very simple:
 Done.  Foo now has simple far(), bar() and car() accessors
 defined.
 
-Alternatively, if you want to follow Damian's I<best practice> guidelines 
+Alternatively, if you want to follow Damian's I<best practice> guidelines
 you can use:
 
     package Foo;
@@ -337,7 +335,7 @@ Currently only the C<is> attribute is supported.
 
 Class::Accessor provides a basic constructor, C<new>.  It generates a
 hash-based object and can be called as either a class method or an
-object method.  
+object method.
 
 =head2 new
 
@@ -588,7 +586,7 @@ Here's an example of generating an accessor for every public field of
 your class.
 
     package Altoids;
-    
+
     use base qw(Class::Accessor Class::Fields);
     use fields qw(curiously strong mints);
     Altoids->mk_accessors( Altoids->show_fields('Public') );
@@ -604,7 +602,7 @@ your class.
     $tin->curiously('Curiouser and curiouser');
     print $tin->{curiously};    # prints 'Curiouser and curiouser'
 
-    
+
     # Subclassing works, too.
     package Mint::Snuff;
     use base qw(Altoids);
