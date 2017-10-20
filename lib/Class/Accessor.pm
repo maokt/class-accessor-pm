@@ -4,13 +4,11 @@ use strict;
 $Class::Accessor::VERSION = '0.34';
 
 sub new {
-    my($proto, $fields) = @_;
-    my($class) = ref $proto || $proto;
-
-    $fields = {} unless defined $fields;
-
-    # make a copy of $fields.
-    bless {%$fields}, $class;
+    return bless
+        defined $_[1]
+            ? {%{$_[1]}} # make a copy of $fields.
+            : {},
+        ref $_[0] || $_[0];
 }
 
 sub mk_accessors {
