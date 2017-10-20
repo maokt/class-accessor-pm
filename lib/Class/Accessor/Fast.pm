@@ -1,44 +1,49 @@
 package Class::Accessor::Fast;
 use base 'Class::Accessor';
 use strict;
+use B 'perlstring';
+
 $Class::Accessor::Fast::VERSION = '0.34';
 
 sub make_accessor {
-    my($class, $field) = @_;
+        my ($class, $field) = @_;
 
-    return sub {
-        return $_[0]->{$field} if scalar(@_) == 1;
-        return $_[0]->{$field}  = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
-    };
+        eval sprintf q{
+                sub {
+                        return $_[0]{%s} if scalar(@_) == 1;
+                        return $_[0]{%s}  = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+                }
+        }, map { perlstring($_) } $field, $field;
 }
-
 
 sub make_ro_accessor {
-    my($class, $field) = @_;
+        my($class, $field) = @_;
 
-    return sub {
-        return $_[0]->{$field} if @_ == 1;
-        my $caller = caller;
-        $_[0]->_croak("'$caller' cannot alter the value of '$field' on objects of class '$class'");
-    };
+        eval sprintf q{
+                sub {
+                        return $_[0]{%s} if @_ == 1;
+                        my $caller = caller;
+                        $_[0]->_croak(sprintf "'$caller' cannot alter the value of '%%s' on objects of class '%%s'", %s, %s);
+                }
+        }, map { perlstring($_) } $field, $field, $class;
 }
-
 
 sub make_wo_accessor {
-    my($class, $field) = @_;
+        my($class, $field) = @_;
 
-    return sub {
-        if (@_ == 1) {
-            my $caller = caller;
-            $_[0]->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
-        }
-        else {
-            return $_[0]->{$field} = $_[1] if @_ == 2;
-            return (shift)->{$field} = \@_;
-        }
-    };
+        eval sprintf q{
+                sub {
+                        if (@_ == 1) {
+                                my $caller = caller;
+                                $_[0]->_croak(sprintf "'$caller' cannot access the value of '%%s' on objects of class '%%s'", %s, %s);
+                        }
+                        else {
+                                return $_[0]{%s} = $_[1] if @_ == 2;
+                                return (shift)->{%s} = \@_;
+                        }
+                }
+        }, map { perlstring($_) } $field, $class, $field, $field;
 }
-
 
 1;
 
