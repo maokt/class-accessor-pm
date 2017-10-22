@@ -1,6 +1,7 @@
 package Class::Accessor::Faster;
 use base 'Class::Accessor';
 use strict;
+use B 'perlstring';
 $Class::Accessor::Faster::VERSION = '0.51';
 
 my %slot;
@@ -29,34 +30,41 @@ sub new {
 sub make_accessor {
     my($class, $field) = @_;
     my $n = $class->_slot($field);
-    return sub {
-        return $_[0]->[$n] if scalar(@_) == 1;
-        return $_[0]->[$n]  = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
-    };
+    eval sprintf q{
+        sub {
+            return $_[0][%d] if scalar(@_) == 1;
+            return $_[0][%d]  = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+        }
+    }, $n, $n;
 }
 
 sub make_ro_accessor {
     my($class, $field) = @_;
     my $n = $class->_slot($field);
-    return sub {
-        return $_[0]->[$n] if @_ == 1;
-        my $caller = caller;
-        $_[0]->_croak("'$caller' cannot alter the value of '$field' on objects of class '$class'");
-    };
+    eval sprintf q{
+        sub {
+            return $_[0][%d] if @_ == 1;
+            my $caller = caller;
+            $_[0]->_croak(sprintf "'$caller' cannot alter the value of '%%s' on objects of class '%%s'", %s, %s);
+        }
+    }, $n, map(perlstring($_), $field, $class);
 }
 
 sub make_wo_accessor {
     my($class, $field) = @_;
     my $n = $class->_slot($field);
-    return sub {
-        if (@_ == 1) {
-            my $caller = caller;
-            $_[0]->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
-        } else {
-            return $_[0]->[$n] = $_[1] if @_ == 2;
-            return (shift)->[$n] = \@_;
+    eval sprintf q{
+        sub {
+            if (@_ == 1) {
+                my $caller = caller;
+                $_[0]->_croak(sprintf "'$caller' cannot access the value of '%%s' on objects of class '%%s'", %s, %s);
+            }
+            else {
+                return $_[0][%d] = $_[1] if @_ == 2;
+                return (shift)->[%d] = \@_;
+            }
         }
-    };
+    }, map(perlstring($_), $field, $class), $n, $n;
 }
 
 1;
