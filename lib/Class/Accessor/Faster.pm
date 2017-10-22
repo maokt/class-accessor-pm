@@ -1,7 +1,7 @@
 package Class::Accessor::Faster;
 use base 'Class::Accessor';
 use strict;
-$Class::Accessor::Faster::VERSION = $Class::Accessor::VERSION;
+$Class::Accessor::Faster::VERSION = '0.51';
 
 my %slot;
 sub _slot {

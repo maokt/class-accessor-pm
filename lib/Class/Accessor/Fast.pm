@@ -2,7 +2,7 @@ package Class::Accessor::Fast;
 use base 'Class::Accessor';
 use strict;
 use B 'perlstring';
-$Class::Accessor::Fast::VERSION = $Class::Accessor::VERSION;
+$Class::Accessor::Fast::VERSION = '0.51';
 
 sub make_accessor {
         my ($class, $field) = @_;
