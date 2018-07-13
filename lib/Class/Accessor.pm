@@ -20,6 +20,9 @@ sub mk_accessors {
 if (eval { require Sub::Name }) {
     Sub::Name->import;
 }
+elsif (eval { require Sub::Util }) {
+    *subname = \&Sub::Util::set_subname;
+}
 
 {
     no strict 'refs';
@@ -31,6 +34,13 @@ if (eval { require Sub::Name }) {
             if (/^(?:antlers|moose-?like)$/i) {
                 *{"${caller}::has"} = sub {
                     my ($f, %args) = @_;
+                    if (ref $args{isa}) {
+                        $f = [$f, $args{isa}];
+                    }
+                    elsif (defined $args{isa}) {
+                        require Type::Utils;
+                        $f = [$f, Type::Utils::dwim_type($args{isa})];
+                    }
                     $caller->_mk_accessors(($args{is}||"rw"), $f);
                 };
                 *{"${caller}::extends"} = sub {
@@ -60,6 +70,11 @@ if (eval { require Sub::Name }) {
         my $wa = $access eq 'rw' || $access eq 'wo';
 
         foreach my $field (@fields) {
+            my $type;
+            if (ref($field) eq 'ARRAY') {
+                ($field, $type) = @$field;
+            }
+            
             my $accessor_name = $self->accessor_name_for($field);
             my $mutator_name = $self->mutator_name_for($field);
             if( $accessor_name eq 'DESTROY' or $mutator_name eq 'DESTROY' ) {
@@ -68,11 +83,11 @@ if (eval { require Sub::Name }) {
             if ($accessor_name eq $mutator_name) {
                 my $accessor;
                 if ($ra && $wa) {
-                    $accessor = $self->make_accessor($field);
+                    $accessor = $self->make_accessor($field, $type ? $type : ());
                 } elsif ($ra) {
-                    $accessor = $self->make_ro_accessor($field);
+                    $accessor = $self->make_ro_accessor($field, $type ? $type : ());
                 } else {
-                    $accessor = $self->make_wo_accessor($field);
+                    $accessor = $self->make_wo_accessor($field, $type ? $type : ());
                 }
                 my $fullname = "${class}::$accessor_name";
                 my $subnamed = 0;
@@ -91,12 +106,12 @@ if (eval { require Sub::Name }) {
                 my $fullaccname = "${class}::$accessor_name";
                 my $fullmutname = "${class}::$mutator_name";
                 if ($ra and not defined &{$fullaccname}) {
-                    my $accessor = $self->make_ro_accessor($field);
+                    my $accessor = $self->make_ro_accessor($field, $type ? $type : ());
                     subname($fullaccname, $accessor) if defined &subname;
                     *{$fullaccname} = $accessor;
                 }
                 if ($wa and not defined &{$fullmutname}) {
-                    my $mutator = $self->make_wo_accessor($field);
+                    my $mutator = $self->make_wo_accessor($field, $type ? $type : ());
                     subname($fullmutname, $mutator) if defined &subname;
                     *{$fullmutname} = $mutator;
                 }
@@ -104,6 +119,36 @@ if (eval { require Sub::Name }) {
         }
     }
 
+    my %types;
+    my %installed;
+    sub _install_typed_constructor {
+        my ($class, $field, $type) = @_;
+        $types{$class}{$field} = $type;
+        
+        unless ($installed{$class}) {
+            require Scalar::Util;
+            my $constructor = "${class}::new";
+            my $orig = $class->can('new');
+            my $code = sub {
+                my $instance = shift->$orig(@_);
+                for my $field (sort keys %{$types{$class}}) {
+                    my $type  = $types{$class}{$field};
+                    my $value = $instance->get($field);
+                    next unless defined $value;
+                    if (Scalar::Util::blessed($type)) {
+                        $type->check($value) or $instance->_croak($type->get_message($value));
+                    }
+                    else {
+                        $type->($value) or $instance->_croak("Value for '$field' failed type constraint");
+                    }
+                }
+                return $instance;
+            };
+            *$constructor = $code;
+            subname($constructor, $code) if defined &subname;
+            ++$installed{$class};
+        }
+    }
 }
 
 sub mk_ro_accessors {
@@ -167,7 +212,55 @@ sub get {
 }
 
 sub make_accessor {
-    my ($class, $field) = @_;
+    my ($class, $field, $type) = @_;
+
+    if ($type) {
+        my ($check, $typeobj);
+        require Scalar::Util;
+        if (Scalar::Util::blessed($type)) {
+            $check = $type->compiled_check if $type->can('compiled_check');
+            $typeobj = $type if $type->can('check') && $type->can('get_message');
+        }
+        elsif (ref($type) eq 'CODE') {
+            $check = $type;
+        }
+
+        $class->_install_typed_constructor($field, $type);
+
+        if ($check) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $check->(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak(
+                            $typeobj ? $typeobj->get_message($value) : "Value for '$field' failed type constraint"
+                        );
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    return $self->get($field);
+                }
+            }
+        }
+        elsif ($typeobj) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $typeobj->check(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak($typeobj->get_message($value));
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    return $self->get($field);
+                }
+            }
+        }
+        else {
+            $class->_croak("Type constraint for '$field' cannot be used");
+        }
+    }
 
     return sub {
         my $self = shift;
@@ -181,7 +274,9 @@ sub make_accessor {
 }
 
 sub make_ro_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    $class->_install_typed_constructor($field, $type) if $type;
 
     return sub {
         my $self = shift;
@@ -197,7 +292,57 @@ sub make_ro_accessor {
 }
 
 sub make_wo_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    if ($type) {
+        my ($check, $typeobj);
+        require Scalar::Util;
+        if (Scalar::Util::blessed($type)) {
+            $check = $type->compiled_check if $type->can('compiled_check');
+            $typeobj = $type if $type->can('check') && $type->can('get_message');
+        }
+        elsif (ref($type) eq 'CODE') {
+            $check = $type;
+        }
+
+        $class->_install_typed_constructor($field, $type);
+
+        if ($check) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $check->(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak(
+                            $typeobj ? $typeobj->get_message($value) : "Value for '$field' failed type constraint"
+                        );
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    my $caller = caller;
+                    $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
+                }
+            }
+        }
+        elsif ($typeobj) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $typeobj->check(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak($typeobj->get_message($value));
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    my $caller = caller;
+                    $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
+                }
+            }
+        }
+        else {
+            $class->_croak("Type constraint for '$field' cannot be used");
+        }
+    }
 
     return sub {
         my $self = shift;
