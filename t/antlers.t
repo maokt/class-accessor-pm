@@ -23,7 +23,7 @@ for my $f (qw/foo roro wowo rwrw/) {
 my $test = Silly::Hands->new({
     foo => "bar",
     roro => "boat",
-    rwrw => "huh",
+    rwrw => "999",
     wowo => "whoa",
 });
 
