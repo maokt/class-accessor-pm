@@ -474,7 +474,7 @@ By popular demand we now have a simple Moose-like interface.  You can now do:
     has bar => ( is => "rw" );
     has car => ( is => "rw" );
 
-Currently only the C<is> attribute is supported.
+Currently only the C<is> and C<isa> attributes are supported.
 
 =head1 CONSTRUCTOR
 
@@ -592,8 +592,8 @@ Then you can declare accessors like this:
   has beta  => ( is => "ro", isa => "Str" );
   has gamma => ( is => "wo", isa => "Str" );
 
-Currently only the C<is> attribute is supported.  And our C<is> also supports
-the "wo" value to make a write-only accessor.
+Currently only the C<is> and C<isa> attributes are supported.  And our C<is>
+also supports the "wo" value to make a write-only accessor.
 
 If you are using the Moose-like interface then you should use the C<extends>
 rather than tweaking your C<@ISA> directly.  Basically, replace
@@ -603,6 +603,61 @@ rather than tweaking your C<@ISA> directly.  Basically, replace
 with
 
   extends(qw/Foo Bar/);
+
+=head1 TYPE CONSTRAINTS
+
+Values passed to the constructor and accessors can be checked using type
+constraints.
+
+Type constraints can be blessed objects providing C<check> and C<get_message>
+methods. This allows L<Type::Tiny>, L<Specio>, L<MooseX::Types>, and
+L<MouseX::Types> type libraries to work.
+
+    package Foo;
+    use Types::Standard qw( Int ArrayRef );
+    use base qw(Class::Accessor);
+    Foo->mk_accessors(["foo", Int], ["bar", ArrayRef], "baz");
+
+    my $obj = Foo->new({ foo => 42, bar => [], baz => "quux" });
+    print $obj->foo;    # 42
+    
+    $obj->foo("hello world"); # croaks
+
+Or they can be coderefs returning a true value to indicate the value passes
+the check and returning a false value or dying to indicate a failure.
+
+    package Foo;
+    use base qw(Class::Accessor);
+    Foo->mk_accessors(
+        ["foo", sub { Scalar::Util::looks_like_number($_[0]) }],
+        ["bar", sub { ref($_[0]) eq 'ARRAY' }],
+        "baz",
+    );
+
+    my $obj = Foo->new({ foo => 42, bar => [], baz => "quux" });
+    print $obj->foo;    # 42
+    
+    $obj->foo("hello world"); # croaks
+
+With the Moose-like interface, you can also provide type constraints names
+as strings.
+
+    package Foo;
+    use Class::Accessor "antlers";
+    has foo => (is => "rw", isa => "Int");
+    has bar => (is => "rw", isa => "ArrayRef[Num]");
+    has baz => (is => "rw", isa => "Any");
+
+If using strings to name type constraints, Class::Accessor will load
+L<Type::Utils> to get a definition for the type.
+
+Read-write and write-only accessors will check type constraints. If a class
+uses any type constraints, a custom constructor wrapping the class's existing
+constructor will be installed, ensuring type constrains are checked by the
+constructor.
+
+Calling C<< $obj->set($field, $value) >> will bypass type checks. Use this
+feature with caution.
 
 =head1 DETAILS
 
@@ -654,6 +709,7 @@ override this method to change how it is retrieved.
 =head2 make_accessor
 
     $accessor = __PACKAGE__->make_accessor($field);
+    $accessor = __PACKAGE__->make_accessor($field, $type);
 
 Generates a subroutine reference which acts as an accessor for the given
 $field.  It calls get() and set().
@@ -664,6 +720,7 @@ get() and set() before you start mucking with make_accessor().
 =head2 make_ro_accessor
 
     $read_only_accessor = __PACKAGE__->make_ro_accessor($field);
+    $read_only_accessor = __PACKAGE__->make_ro_accessor($field, $type);
 
 Generates a subroutine reference which acts as a read-only accessor for
 the given $field.  It only calls get().
@@ -673,6 +730,7 @@ Override get() to change the behavior of your accessors.
 =head2 make_wo_accessor
 
     $write_only_accessor = __PACKAGE__->make_wo_accessor($field);
+    $write_only_accessor = __PACKAGE__->make_wo_accessor($field, $type);
 
 Generates a subroutine reference which acts as a write-only accessor
 (mutator) for the given $field.  It only calls set().
