@@ -11,9 +11,9 @@ use Class::Accessor "antlers";
 ::ok defined &has, "I iz in ur module";
 
 has "foo";
-has rwrw => ( is => "rw", isa => "Int" );
-has roro => ( is => "ro", isa => "Str" );
-has wowo => ( is => "wo", isa => "Str" );
+has rwrw => ( is => "rw", isa => sub { local $_ = $_[0]; defined and not ref and /^-?[1-9][0-9]*$/ } );
+has roro => ( is => "ro", isa => sub { local $_ = $_[0]; defined and not ref } );
+has wowo => ( is => "wo", isa => sub { local $_ = $_[0]; defined and not ref } );
 
 package main;
 for my $f (qw/foo roro wowo rwrw/) {
