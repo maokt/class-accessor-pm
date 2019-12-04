@@ -4,8 +4,70 @@ use strict;
 use B 'perlstring';
 $Class::Accessor::Fast::VERSION = '0.51';
 
+sub _make_type_check {
+    my ($class, $field, $type, $varname) = @_;
+
+    return unless $type;
+
+    $class->_install_typed_constructor($field, $type);
+
+    require Scalar::Util;
+
+    if (ref($type) eq 'CODE') {
+        return (
+            undef,
+            $type,
+            sprintf('$check->(%s) or $_[0]->_croak("Value for \'%s\' failed type constraint")', $varname, $field),
+        );
+    }
+    elsif (Scalar::Util::blessed($type)
+    and    $type->can('can_be_inlined')
+    and    $type->can_be_inlined
+    and    $type->can('inline_check')
+    and    $type->can('get_message')) {
+        return (
+            $type,
+            undef,
+            sprintf('(%s) or $_[0]->_croak($type->get_message(%s))', $type->inline_check($varname), $varname),
+        );
+    }
+    elsif (Scalar::Util::blessed($type)
+    and    $type->can('compiled_check')
+    and    $type->can('get_message')) {
+        my $compiled = $type->compiled_check;
+        return (
+            $type,
+            $compiled,
+            sprintf('$check->(%s) or $_[0]->_croak($type->get_message(%s))', $varname, $varname),
+        );
+    }
+    elsif (Scalar::Util::blessed($type)
+    and    $type->can('check')
+    and    $type->can('get_message')) {
+        return (
+            $type,
+            undef,
+            sprintf('$type->check(%s) or $_[0]->_croak($type->get_message(%s))', $varname, $varname),
+        );
+    }
+    else {
+        $class->_croak("Could not handle type constraint for field '$field'");
+    }
+}
+
 sub make_accessor {
-    my ($class, $field) = @_;
+    my ($class, $field, $type) = @_;
+
+    if (my ($typeobj, $check, $perlcode) = $class->_make_type_check($field, $type, '$value')) {
+        return eval sprintf q{
+            sub {
+                return $_[0]{%s} if scalar(@_) == 1;
+                my $value = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+                %s;
+                return $_[0]{%s} = $value;
+            }
+        }, perlstring($field), $perlcode, perlstring($field);
+    }
 
     eval sprintf q{
         sub {
@@ -16,7 +78,9 @@ sub make_accessor {
 }
 
 sub make_ro_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    $class->_install_typed_constructor($field, $type) if $type;
 
     eval sprintf q{
         sub {
@@ -28,7 +92,21 @@ sub make_ro_accessor {
 }
 
 sub make_wo_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    if (my ($typeobj, $check, $perlcode) = $class->_make_type_check($field, $type, '$value')) {
+        return eval sprintf q{
+            sub {
+                if (@_ == 1) {
+                    my $caller = caller;
+                    $_[0]->_croak(sprintf "'$caller' cannot access the value of '%%s' on objects of class '%%s'", %s, %s);
+                }
+                my $value = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+                %s;
+                return $_[0]{%s} = $value;
+            }
+        }, perlstring($field), perlstring($class), $perlcode, perlstring($field);
+    }
 
     eval sprintf q{
         sub {

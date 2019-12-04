@@ -20,6 +20,9 @@ sub mk_accessors {
 if (eval { require Sub::Name }) {
     Sub::Name->import;
 }
+elsif (eval { require Sub::Util }) {
+    *subname = \&Sub::Util::set_subname;
+}
 
 {
     no strict 'refs';
@@ -31,6 +34,13 @@ if (eval { require Sub::Name }) {
             if (/^(?:antlers|moose-?like)$/i) {
                 *{"${caller}::has"} = sub {
                     my ($f, %args) = @_;
+                    if (ref $args{isa}) {
+                        $f = [$f, $args{isa}];
+                    }
+                    elsif (defined $args{isa}) {
+                        require Type::Utils;
+                        $f = [$f, Type::Utils::dwim_type($args{isa})];
+                    }
                     $caller->_mk_accessors(($args{is}||"rw"), $f);
                 };
                 *{"${caller}::extends"} = sub {
@@ -60,6 +70,11 @@ if (eval { require Sub::Name }) {
         my $wa = $access eq 'rw' || $access eq 'wo';
 
         foreach my $field (@fields) {
+            my $type;
+            if (ref($field) eq 'ARRAY') {
+                ($field, $type) = @$field;
+            }
+            
             my $accessor_name = $self->accessor_name_for($field);
             my $mutator_name = $self->mutator_name_for($field);
             if( $accessor_name eq 'DESTROY' or $mutator_name eq 'DESTROY' ) {
@@ -68,11 +83,11 @@ if (eval { require Sub::Name }) {
             if ($accessor_name eq $mutator_name) {
                 my $accessor;
                 if ($ra && $wa) {
-                    $accessor = $self->make_accessor($field);
+                    $accessor = $self->make_accessor($field, $type ? $type : ());
                 } elsif ($ra) {
-                    $accessor = $self->make_ro_accessor($field);
+                    $accessor = $self->make_ro_accessor($field, $type ? $type : ());
                 } else {
-                    $accessor = $self->make_wo_accessor($field);
+                    $accessor = $self->make_wo_accessor($field, $type ? $type : ());
                 }
                 my $fullname = "${class}::$accessor_name";
                 my $subnamed = 0;
@@ -91,12 +106,12 @@ if (eval { require Sub::Name }) {
                 my $fullaccname = "${class}::$accessor_name";
                 my $fullmutname = "${class}::$mutator_name";
                 if ($ra and not defined &{$fullaccname}) {
-                    my $accessor = $self->make_ro_accessor($field);
+                    my $accessor = $self->make_ro_accessor($field, $type ? $type : ());
                     subname($fullaccname, $accessor) if defined &subname;
                     *{$fullaccname} = $accessor;
                 }
                 if ($wa and not defined &{$fullmutname}) {
-                    my $mutator = $self->make_wo_accessor($field);
+                    my $mutator = $self->make_wo_accessor($field, $type ? $type : ());
                     subname($fullmutname, $mutator) if defined &subname;
                     *{$fullmutname} = $mutator;
                 }
@@ -104,6 +119,36 @@ if (eval { require Sub::Name }) {
         }
     }
 
+    my %types;
+    my %installed;
+    sub _install_typed_constructor {
+        my ($class, $field, $type) = @_;
+        $types{$class}{$field} = $type;
+        
+        unless ($installed{$class}) {
+            require Scalar::Util;
+            my $constructor = "${class}::new";
+            my $orig = $class->can('new');
+            my $code = sub {
+                my $instance = shift->$orig(@_);
+                for my $field (sort keys %{$types{$class}}) {
+                    my $type  = $types{$class}{$field};
+                    my $value = $instance->get($field);
+                    next unless defined $value;
+                    if (Scalar::Util::blessed($type)) {
+                        $type->check($value) or $instance->_croak($type->get_message($value));
+                    }
+                    else {
+                        $type->($value) or $instance->_croak("Value for '$field' failed type constraint");
+                    }
+                }
+                return $instance;
+            };
+            *$constructor = $code;
+            subname($constructor, $code) if defined &subname;
+            ++$installed{$class};
+        }
+    }
 }
 
 sub mk_ro_accessors {
@@ -167,7 +212,55 @@ sub get {
 }
 
 sub make_accessor {
-    my ($class, $field) = @_;
+    my ($class, $field, $type) = @_;
+
+    if ($type) {
+        my ($check, $typeobj);
+        require Scalar::Util;
+        if (Scalar::Util::blessed($type)) {
+            $check = $type->compiled_check if $type->can('compiled_check');
+            $typeobj = $type if $type->can('check') && $type->can('get_message');
+        }
+        elsif (ref($type) eq 'CODE') {
+            $check = $type;
+        }
+
+        $class->_install_typed_constructor($field, $type);
+
+        if ($check) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $check->(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak(
+                            $typeobj ? $typeobj->get_message($value) : "Value for '$field' failed type constraint"
+                        );
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    return $self->get($field);
+                }
+            }
+        }
+        elsif ($typeobj) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $typeobj->check(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak($typeobj->get_message($value));
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    return $self->get($field);
+                }
+            }
+        }
+        else {
+            $class->_croak("Type constraint for '$field' cannot be used");
+        }
+    }
 
     return sub {
         my $self = shift;
@@ -181,7 +274,9 @@ sub make_accessor {
 }
 
 sub make_ro_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    $class->_install_typed_constructor($field, $type) if $type;
 
     return sub {
         my $self = shift;
@@ -197,7 +292,57 @@ sub make_ro_accessor {
 }
 
 sub make_wo_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
+
+    if ($type) {
+        my ($check, $typeobj);
+        require Scalar::Util;
+        if (Scalar::Util::blessed($type)) {
+            $check = $type->compiled_check if $type->can('compiled_check');
+            $typeobj = $type if $type->can('check') && $type->can('get_message');
+        }
+        elsif (ref($type) eq 'CODE') {
+            $check = $type;
+        }
+
+        $class->_install_typed_constructor($field, $type);
+
+        if ($check) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $check->(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak(
+                            $typeobj ? $typeobj->get_message($value) : "Value for '$field' failed type constraint"
+                        );
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    my $caller = caller;
+                    $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
+                }
+            }
+        }
+        elsif ($typeobj) {
+            return sub {
+                my $self = shift;
+
+                if(@_) {
+                    if (! $typeobj->check(my $value = (@_==1 ? $_[0] : [@_]))) {
+                        $self->_croak($typeobj->get_message($value));
+                    }
+                    return $self->set($field, @_);
+                } else {
+                    my $caller = caller;
+                    $self->_croak("'$caller' cannot access the value of '$field' on objects of class '$class'");
+                }
+            }
+        }
+        else {
+            $class->_croak("Type constraint for '$field' cannot be used");
+        }
+    }
 
     return sub {
         my $self = shift;
@@ -329,7 +474,7 @@ By popular demand we now have a simple Moose-like interface.  You can now do:
     has bar => ( is => "rw" );
     has car => ( is => "rw" );
 
-Currently only the C<is> attribute is supported.
+Currently only the C<is> and C<isa> attributes are supported.
 
 =head1 CONSTRUCTOR
 
@@ -447,8 +592,8 @@ Then you can declare accessors like this:
   has beta  => ( is => "ro", isa => "Str" );
   has gamma => ( is => "wo", isa => "Str" );
 
-Currently only the C<is> attribute is supported.  And our C<is> also supports
-the "wo" value to make a write-only accessor.
+Currently only the C<is> and C<isa> attributes are supported.  And our C<is>
+also supports the "wo" value to make a write-only accessor.
 
 If you are using the Moose-like interface then you should use the C<extends>
 rather than tweaking your C<@ISA> directly.  Basically, replace
@@ -458,6 +603,61 @@ rather than tweaking your C<@ISA> directly.  Basically, replace
 with
 
   extends(qw/Foo Bar/);
+
+=head1 TYPE CONSTRAINTS
+
+Values passed to the constructor and accessors can be checked using type
+constraints.
+
+Type constraints can be blessed objects providing C<check> and C<get_message>
+methods. This allows L<Type::Tiny>, L<Specio>, L<MooseX::Types>, and
+L<MouseX::Types> type libraries to work.
+
+    package Foo;
+    use Types::Standard qw( Int ArrayRef );
+    use base qw(Class::Accessor);
+    Foo->mk_accessors(["foo", Int], ["bar", ArrayRef], "baz");
+
+    my $obj = Foo->new({ foo => 42, bar => [], baz => "quux" });
+    print $obj->foo;    # 42
+    
+    $obj->foo("hello world"); # croaks
+
+Or they can be coderefs returning a true value to indicate the value passes
+the check and returning a false value or dying to indicate a failure.
+
+    package Foo;
+    use base qw(Class::Accessor);
+    Foo->mk_accessors(
+        ["foo", sub { Scalar::Util::looks_like_number($_[0]) }],
+        ["bar", sub { ref($_[0]) eq 'ARRAY' }],
+        "baz",
+    );
+
+    my $obj = Foo->new({ foo => 42, bar => [], baz => "quux" });
+    print $obj->foo;    # 42
+    
+    $obj->foo("hello world"); # croaks
+
+With the Moose-like interface, you can also provide type constraints names
+as strings.
+
+    package Foo;
+    use Class::Accessor "antlers";
+    has foo => (is => "rw", isa => "Int");
+    has bar => (is => "rw", isa => "ArrayRef[Num]");
+    has baz => (is => "rw", isa => "Any");
+
+If using strings to name type constraints, Class::Accessor will load
+L<Type::Utils> to get a definition for the type.
+
+Read-write and write-only accessors will check type constraints. If a class
+uses any type constraints, a custom constructor wrapping the class's existing
+constructor will be installed, ensuring type constrains are checked by the
+constructor.
+
+Calling C<< $obj->set($field, $value) >> will bypass type checks. Use this
+feature with caution.
 
 =head1 DETAILS
 
@@ -509,6 +709,7 @@ override this method to change how it is retrieved.
 =head2 make_accessor
 
     $accessor = __PACKAGE__->make_accessor($field);
+    $accessor = __PACKAGE__->make_accessor($field, $type);
 
 Generates a subroutine reference which acts as an accessor for the given
 $field.  It calls get() and set().
@@ -519,6 +720,7 @@ get() and set() before you start mucking with make_accessor().
 =head2 make_ro_accessor
 
     $read_only_accessor = __PACKAGE__->make_ro_accessor($field);
+    $read_only_accessor = __PACKAGE__->make_ro_accessor($field, $type);
 
 Generates a subroutine reference which acts as a read-only accessor for
 the given $field.  It only calls get().
@@ -528,6 +730,7 @@ Override get() to change the behavior of your accessors.
 =head2 make_wo_accessor
 
     $write_only_accessor = __PACKAGE__->make_wo_accessor($field);
+    $write_only_accessor = __PACKAGE__->make_wo_accessor($field, $type);
 
 Generates a subroutine reference which acts as a write-only accessor
 (mutator) for the given $field.  It only calls set().

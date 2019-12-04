@@ -27,9 +27,62 @@ sub new {
     return $self;
 }
 
+sub _make_type_check {
+    my ($class, $field, $type, $varname) = @_;
+    return unless $type;
+    require Class::Accessor::Fast;
+    goto \&Class::Accessor::Fast::_make_type_check;
+}
+
+{
+    my %types;
+    my %installed;
+    sub _install_typed_constructor {
+        my ($class, $field, $type) = @_;
+        $types{$class}{$field} = $type;
+        
+        unless ($installed{$class}) {
+            require Scalar::Util;
+            my $constructor = "${class}::new";
+            my $orig = $class->can('new');
+            my $code = sub {
+                my $instance = shift->$orig(@_);
+                for my $field (sort keys %{$types{$class}}) {
+                    my $type  = $types{$class}{$field};
+                    my $value = $instance->[ ref($instance)->_slot($field) ];
+                    next unless defined $value;
+                    if (Scalar::Util::blessed($type)) {
+                        $type->check($value) or $instance->_croak($type->get_message($value));
+                    }
+                    else {
+                        $type->($value) or $instance->_croak("Value for '$field' failed type constraint");
+                    }
+                }
+                return $instance;
+            };
+            no strict 'refs';
+            *$constructor = $code;
+            subname($constructor, $code) if defined &subname;
+            ++$installed{$class};
+        }
+    }
+}
+
 sub make_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
     my $n = $class->_slot($field);
+
+    if (my ($typeobj, $check, $perlcode) = $class->_make_type_check($field, $type, '$value')) {
+        return eval sprintf q{
+            sub {
+                return $_[0][%d] if scalar(@_) == 1;
+                my $value = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+                %s;
+                $_[0][%d] = $value;
+            }
+        }, $n, $perlcode, $n;
+    }
+
     eval sprintf q{
         sub {
             return $_[0][%d] if scalar(@_) == 1;
@@ -39,8 +92,9 @@ sub make_accessor {
 }
 
 sub make_ro_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
     my $n = $class->_slot($field);
+    $class->_install_typed_constructor($field, $type) if $type;
     eval sprintf q{
         sub {
             return $_[0][%d] if @_ == 1;
@@ -51,8 +105,23 @@ sub make_ro_accessor {
 }
 
 sub make_wo_accessor {
-    my($class, $field) = @_;
+    my($class, $field, $type) = @_;
     my $n = $class->_slot($field);
+
+    if (my ($typeobj, $check, $perlcode) = $class->_make_type_check($field, $type, '$value')) {
+        return eval sprintf q{
+            sub {
+                if (@_ == 1) {
+                    my $caller = caller;
+                    $_[0]->_croak(sprintf "'$caller' cannot access the value of '%%s' on objects of class '%%s'", %s, %s);
+                }
+                my $value = scalar(@_) == 2 ? $_[1] : [@_[1..$#_]];
+                %s;
+                return $_[0][%d] = $value;
+            }
+        }, perlstring($field), perlstring($class), $perlcode, $n;
+    }
+
     eval sprintf q{
         sub {
             if (@_ == 1) {
